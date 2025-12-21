@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { JournalEntry, Mood } from '@/types/journal';
 import { MoodSelector } from './MoodSelector';
+import { ImageUpload } from './ImageUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,7 +10,7 @@ import { toast } from 'sonner';
 
 interface JournalEditorProps {
   entry: JournalEntry | null;
-  onSave: (title: string, content: string, mood?: Mood) => void;
+  onSave: (title: string, content: string, mood?: Mood, images?: string[]) => void;
   onDelete: () => void;
   isNew: boolean;
 }
@@ -18,16 +19,19 @@ export const JournalEditor = ({ entry, onSave, onDelete, isNew }: JournalEditorP
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [mood, setMood] = useState<Mood | undefined>();
+  const [images, setImages] = useState<string[]>([]);
 
   useEffect(() => {
     if (entry) {
       setTitle(entry.title);
       setContent(entry.content);
       setMood(entry.mood);
+      setImages(entry.images || []);
     } else {
       setTitle('');
       setContent('');
       setMood(undefined);
+      setImages([]);
     }
   }, [entry]);
 
@@ -36,7 +40,7 @@ export const JournalEditor = ({ entry, onSave, onDelete, isNew }: JournalEditorP
       toast.error('Please add a title or content');
       return;
     }
-    onSave(title, content, mood);
+    onSave(title, content, mood, images);
     toast.success(isNew ? 'Entry created!' : 'Entry saved!');
   };
 
@@ -46,6 +50,10 @@ export const JournalEditor = ({ entry, onSave, onDelete, isNew }: JournalEditorP
   };
 
   const handleDownloadPDF = () => {
+    const imageHtml = images.length > 0 
+      ? `<div class="images">${images.map(url => `<img src="${url}" style="max-width: 200px; margin: 10px;" />`).join('')}</div>` 
+      : '';
+    
     const printContent = `
       <html>
         <head>
@@ -55,6 +63,7 @@ export const JournalEditor = ({ entry, onSave, onDelete, isNew }: JournalEditorP
             h1 { color: #333; border-bottom: 2px solid #6366f1; padding-bottom: 10px; }
             .meta { color: #666; font-size: 14px; margin-bottom: 20px; }
             .content { line-height: 1.8; white-space: pre-wrap; }
+            .images { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 10px; }
           </style>
         </head>
         <body>
@@ -69,6 +78,7 @@ export const JournalEditor = ({ entry, onSave, onDelete, isNew }: JournalEditorP
             ${mood ? ` • Feeling: ${mood}` : ''}
           </div>
           <div class="content">${content}</div>
+          ${imageHtml}
         </body>
       </html>
     `;
@@ -109,10 +119,17 @@ export const JournalEditor = ({ entry, onSave, onDelete, isNew }: JournalEditorP
         placeholder="Start writing your thoughts..."
         value={content}
         onChange={(e) => setContent(e.target.value)}
-        className="flex-1 min-h-[300px] resize-none bg-background/50 border-border/50 focus:border-primary font-mono text-sm"
+        className="flex-1 min-h-[200px] resize-none bg-background/50 border-border/50 focus:border-primary font-mono text-sm mb-4"
       />
 
-      <div className="flex gap-3 mt-6 flex-wrap">
+      <div className="mb-4">
+        <label className="text-sm font-medium text-muted-foreground mb-2 block">
+          Attach Images
+        </label>
+        <ImageUpload images={images} onImagesChange={setImages} />
+      </div>
+
+      <div className="flex gap-3 mt-auto flex-wrap">
         <Button onClick={handleSave} className="gradient-button border-0">
           <Save className="w-4 h-4 mr-2" />
           Save
