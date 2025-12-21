@@ -1,77 +1,127 @@
 import { useState, useEffect, useCallback } from 'react';
 import { JournalEntry, Mood } from '@/types/journal';
-
-const STORAGE_KEY = 'journal_entries';
-
-const generateId = () => Math.random().toString(36).substring(2) + Date.now().toString(36);
-
-const loadEntries = (): JournalEntry[] => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed.map((entry: any) => ({
-        ...entry,
-        createdAt: new Date(entry.createdAt),
-        updatedAt: new Date(entry.updatedAt),
-      }));
-    }
-  } catch (error) {
-    console.error('Failed to load entries:', error);
-  }
-  return [];
-};
-
-const saveEntries = (entries: JournalEntry[]) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  } catch (error) {
-    console.error('Failed to save entries:', error);
-  }
-};
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export const useJournalEntries = () => {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const loaded = loadEntries();
-    setEntries(loaded);
-    setIsLoading(false);
-  }, []);
+  const fetchEntries = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('journal_entries')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  useEffect(() => {
-    if (!isLoading) {
-      saveEntries(entries);
+      if (error) throw error;
+
+      const mapped: JournalEntry[] = (data || []).map((row) => ({
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        mood: row.mood as Mood | undefined,
+        images: row.images || [],
+        createdAt: new Date(row.created_at),
+        updatedAt: new Date(row.updated_at),
+      }));
+
+      setEntries(mapped);
+    } catch (error) {
+      console.error('Failed to fetch entries:', error);
+      toast.error('Failed to load journal entries');
+    } finally {
+      setIsLoading(false);
     }
-  }, [entries, isLoading]);
-
-  const createEntry = useCallback((title: string, content: string, mood?: Mood): JournalEntry => {
-    const now = new Date();
-    const newEntry: JournalEntry = {
-      id: generateId(),
-      title,
-      content,
-      mood,
-      createdAt: now,
-      updatedAt: now,
-    };
-    setEntries(prev => [newEntry, ...prev]);
-    return newEntry;
   }, []);
 
-  const updateEntry = useCallback((id: string, updates: Partial<Pick<JournalEntry, 'title' | 'content' | 'mood'>>) => {
-    setEntries(prev =>
-      prev.map(entry =>
-        entry.id === id
-          ? { ...entry, ...updates, updatedAt: new Date() }
-          : entry
-      )
-    );
+  useEffect(() => {
+    fetchEntries();
+  }, [fetchEntries]);
+
+  const createEntry = useCallback(async (
+    title: string, 
+    content: string, 
+    mood?: Mood, 
+    images?: string[]
+  ): Promise<JournalEntry | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('journal_entries')
+        .insert({
+          title,
+          content,
+          mood: mood || null,
+          images: images || [],
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newEntry: JournalEntry = {
+        id: data.id,
+        title: data.title,
+        content: data.content,
+        mood: data.mood as Mood | undefined,
+        images: data.images || [],
+        createdAt: new Date(data.created_at),
+        updatedAt: new Date(data.updated_at),
+      };
+
+      setEntries(prev => [newEntry, ...prev]);
+      return newEntry;
+    } catch (error) {
+      console.error('Failed to create entry:', error);
+      toast.error('Failed to create entry');
+      return null;
+    }
   }, []);
 
-  const deleteEntry = useCallback((id: string) => {
-    setEntries(prev => prev.filter(entry => entry.id !== id));
+  const updateEntry = useCallback(async (
+    id: string, 
+    updates: Partial<Pick<JournalEntry, 'title' | 'content' | 'mood' | 'images'>>
+  ) => {
+    try {
+      const { error } = await supabase
+        .from('journal_entries')
+        .update({
+          title: updates.title,
+          content: updates.content,
+          mood: updates.mood || null,
+          images: updates.images,
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setEntries(prev =>
+        prev.map(entry =>
+          entry.id === id
+            ? { ...entry, ...updates, updatedAt: new Date() }
+            : entry
+        )
+      );
+    } catch (error) {
+      console.error('Failed to update entry:', error);
+      toast.error('Failed to update entry');
+    }
+  }, []);
+
+  const deleteEntry = useCallback(async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('journal_entries')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setEntries(prev => prev.filter(entry => entry.id !== id));
+    } catch (error) {
+      console.error('Failed to delete entry:', error);
+      toast.error('Failed to delete entry');
+    }
   }, []);
 
   const searchEntries = useCallback((query: string): JournalEntry[] => {

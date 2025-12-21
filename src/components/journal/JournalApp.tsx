@@ -29,20 +29,22 @@ export const JournalApp = () => {
     setIsNewEntry(false);
   }, []);
 
-  const handleSave = useCallback((title: string, content: string, mood?: Mood) => {
+  const handleSave = useCallback(async (title: string, content: string, mood?: Mood, images?: string[]) => {
     if (isNewEntry) {
-      const newEntry = createEntry(title, content, mood);
-      setActiveEntry(newEntry);
-      setIsNewEntry(false);
+      const newEntry = await createEntry(title, content, mood, images);
+      if (newEntry) {
+        setActiveEntry(newEntry);
+        setIsNewEntry(false);
+      }
     } else if (activeEntry) {
-      updateEntry(activeEntry.id, { title, content, mood });
-      setActiveEntry({ ...activeEntry, title, content, mood, updatedAt: new Date() });
+      await updateEntry(activeEntry.id, { title, content, mood, images });
+      setActiveEntry({ ...activeEntry, title, content, mood, images, updatedAt: new Date() });
     }
   }, [isNewEntry, activeEntry, createEntry, updateEntry]);
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = useCallback(async () => {
     if (activeEntry) {
-      deleteEntry(activeEntry.id);
+      await deleteEntry(activeEntry.id);
       setActiveEntry(null);
       setIsNewEntry(false);
     }
