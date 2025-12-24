@@ -5,7 +5,9 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: mode === "production" ? "/jeffmadeit/" : "/",
+  // Use root-relative base so published Lovable deployments work correctly.
+  // (GitHub Pages can be handled separately via hosting config if needed.)
+  base: "/",
   server: {
     host: "::",
     port: 8080,
