@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react';
 import { JournalEntry, Mood } from '@/types/journal';
 import { useJournalEntries } from '@/hooks/useJournalEntries';
+import { useAuth } from '@/hooks/useAuth';
 import { JournalSidebar } from './JournalSidebar';
 import { JournalEditor } from './JournalEditor';
-import { Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Sparkles, LogOut } from 'lucide-react';
 
 export const JournalApp = () => {
   const { 
@@ -15,6 +17,7 @@ export const JournalApp = () => {
     searchEntries,
     filterByMood,
   } = useJournalEntries();
+  const { signOut, user } = useAuth();
 
   const [activeEntry, setActiveEntry] = useState<JournalEntry | null>(null);
   const [isNewEntry, setIsNewEntry] = useState(false);
@@ -64,15 +67,26 @@ export const JournalApp = () => {
   return (
     <div className="min-h-screen gradient-main">
       <div className="container mx-auto p-4 md:p-6 lg:p-8 min-h-screen">
-        <header className="text-center mb-8 animate-fade-in">
-          <div className="flex items-center justify-center gap-3 mb-2">
-            <Sparkles className="w-8 h-8 text-primary-foreground" />
-            <h1 className="text-3xl md:text-4xl font-bold text-primary-foreground">
-              My Personal Journal
-            </h1>
+        <header className="mb-8 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Sparkles className="w-8 h-8 text-primary-foreground" />
+              <h1 className="text-3xl md:text-4xl font-bold text-primary-foreground">
+                My Personal Journal
+              </h1>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={signOut}
+              className="text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
           </div>
-          <p className="text-primary-foreground/70">
-            Capture your thoughts, track your moods
+          <p className="text-primary-foreground/70 text-center mt-2">
+            {user?.email ? `Welcome, ${user.email}` : 'Capture your thoughts, track your moods'}
           </p>
         </header>
 

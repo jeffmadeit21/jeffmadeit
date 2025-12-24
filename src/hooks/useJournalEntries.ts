@@ -1,17 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import { JournalEntry, Mood } from '@/types/journal';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 export const useJournalEntries = () => {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
 
   const fetchEntries = useCallback(async () => {
+    if (!user) {
+      setEntries([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('journal_entries')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -33,7 +42,7 @@ export const useJournalEntries = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchEntries();
@@ -45,6 +54,11 @@ export const useJournalEntries = () => {
     mood?: Mood, 
     images?: string[]
   ): Promise<JournalEntry | null> => {
+    if (!user) {
+      toast.error('You must be logged in to create entries');
+      return null;
+    }
+
     try {
       const { data, error } = await supabase
         .from('journal_entries')
@@ -53,6 +67,7 @@ export const useJournalEntries = () => {
           content,
           mood: mood || null,
           images: images || [],
+          user_id: user.id,
         })
         .select()
         .single();
@@ -76,7 +91,7 @@ export const useJournalEntries = () => {
       toast.error('Failed to create entry');
       return null;
     }
-  }, []);
+  }, [user]);
 
   const updateEntry = useCallback(async (
     id: string, 

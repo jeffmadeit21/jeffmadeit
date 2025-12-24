@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { ImagePlus, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -11,14 +12,43 @@ interface ImageUploadProps {
 
 export const ImageUpload = ({ images, onImagesChange }: ImageUploadProps) => {
   const [isUploading, setIsUploading] = useState(false);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
+
+  // Get signed URL for displaying an image
+  const getSignedUrl = async (path: string): Promise<string | null> => {
+    if (signedUrls[path]) return signedUrls[path];
+    
+    // Extract just the path part after the bucket URL if it's a full URL
+    const pathOnly = path.includes('journal-images/') 
+      ? path.split('journal-images/')[1] 
+      : path;
+
+    const { data, error } = await supabase.storage
+      .from('journal-images')
+      .createSignedUrl(pathOnly, 3600); // 1 hour expiry
+
+    if (error || !data?.signedUrl) {
+      console.error('Failed to get signed URL:', error);
+      return null;
+    }
+
+    setSignedUrls(prev => ({ ...prev, [path]: data.signedUrl }));
+    return data.signedUrl;
+  };
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
+    if (!user) {
+      toast.error('You must be logged in to upload images');
+      return;
+    }
+
     setIsUploading(true);
-    const newImages: string[] = [];
+    const newImagePaths: string[] = [];
 
     try {
       for (const file of Array.from(files)) {
@@ -33,7 +63,8 @@ export const ImageUpload = ({ images, onImagesChange }: ImageUploadProps) => {
         }
 
         const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        // Store in user-specific folder for RLS
+        const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('journal-images')
@@ -45,16 +76,13 @@ export const ImageUpload = ({ images, onImagesChange }: ImageUploadProps) => {
           continue;
         }
 
-        const { data: { publicUrl } } = supabase.storage
-          .from('journal-images')
-          .getPublicUrl(fileName);
-
-        newImages.push(publicUrl);
+        // Store just the path, we'll get signed URLs when displaying
+        newImagePaths.push(fileName);
       }
 
-      if (newImages.length > 0) {
-        onImagesChange([...images, ...newImages]);
-        toast.success(`${newImages.length} image(s) uploaded`);
+      if (newImagePaths.length > 0) {
+        onImagesChange([...images, ...newImagePaths]);
+        toast.success(`${newImagePaths.length} image(s) uploaded`);
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -72,6 +100,37 @@ export const ImageUpload = ({ images, onImagesChange }: ImageUploadProps) => {
     onImagesChange(newImages);
   };
 
+  // Component to render an image with signed URL
+  const SignedImage = ({ path, index }: { path: string; index: number }) => {
+    const [url, setUrl] = useState<string | null>(signedUrls[path] || null);
+    const [loading, setLoading] = useState(!signedUrls[path]);
+
+    useState(() => {
+      if (!signedUrls[path]) {
+        getSignedUrl(path).then((signedUrl) => {
+          setUrl(signedUrl);
+          setLoading(false);
+        });
+      }
+    });
+
+    if (loading) {
+      return (
+        <div className="w-full h-full flex items-center justify-center bg-muted rounded-lg">
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+
+    return (
+      <img
+        src={url || ''}
+        alt={`Attached image ${index + 1}`}
+        className="w-full h-full object-cover rounded-lg border border-border/50"
+      />
+    );
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -80,7 +139,7 @@ export const ImageUpload = ({ images, onImagesChange }: ImageUploadProps) => {
           variant="outline"
           size="sm"
           onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading}
+          disabled={isUploading || !user}
           className="bg-background/50 border-border/50"
         >
           {isUploading ? (
@@ -102,13 +161,9 @@ export const ImageUpload = ({ images, onImagesChange }: ImageUploadProps) => {
 
       {images.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {images.map((url, index) => (
-            <div key={url} className="relative group aspect-square">
-              <img
-                src={url}
-                alt={`Attached image ${index + 1}`}
-                className="w-full h-full object-cover rounded-lg border border-border/50"
-              />
+          {images.map((path, index) => (
+            <div key={path} className="relative group aspect-square">
+              <SignedImage path={path} index={index} />
               <button
                 type="button"
                 onClick={() => handleRemove(index)}
